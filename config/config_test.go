@@ -27,14 +27,19 @@ func TestConfig(t *testing.T) {
 				So(cfg.HealthCheckInterval, ShouldEqual, 30*time.Second)
 				So(cfg.HealthCheckCriticalTimeout, ShouldEqual, 90*time.Second)
 				So(cfg.ImageAPIURL, ShouldEqual, "http://localhost:24700")
-				So(cfg.Brokers, ShouldResemble, []string{"localhost:9092", "localhost:9093", "localhost:9094"})
-				So(cfg.KafkaVersion, ShouldEqual, "1.0.2")
-				So(cfg.KafkaConsumerWorkers, ShouldEqual, 1)
-				So(cfg.ImageUploadedGroup, ShouldEqual, "dp-image-importer")
-				So(cfg.ImageUploadedTopic, ShouldEqual, "image-uploaded")
+
 				So(cfg.S3PrivateBucketName, ShouldEqual, "csv-exported")
 				So(cfg.S3UploadedBucketName, ShouldEqual, "dp-frontend-florence-file-uploads")
 				So(cfg.DownloadServiceURL, ShouldEqual, "http://localhost:23600")
+
+				So(cfg.Kafka, ShouldNotBeNil)
+				So(cfg.Kafka.Addr, ShouldResemble, []string{"localhost:9092", "localhost:9093", "localhost:9094"})
+				So(cfg.Kafka.Version, ShouldEqual, "1.0.2")
+				So(cfg.Kafka.OffsetOldest, ShouldBeTrue)
+				So(cfg.Kafka.NumWorkers, ShouldEqual, 1)
+				So(cfg.Kafka.ImageUploadedGroup, ShouldEqual, "dp-image-importer")
+				So(cfg.Kafka.ImageUploadedTopic, ShouldEqual, "image-uploaded")
+				So(cfg.Kafka.ConsumerMinBrokersHealthy, ShouldEqual, 1)
 			})
 
 			Convey("Then a second call to config should return the same config", func() {

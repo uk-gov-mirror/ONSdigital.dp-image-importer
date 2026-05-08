@@ -6,8 +6,8 @@ import (
 
 	"github.com/ONSdigital/dp-healthcheck/healthcheck"
 	"github.com/ONSdigital/dp-image-importer/config"
-	"github.com/ONSdigital/dp-image-importer/event"
-	kafka "github.com/ONSdigital/dp-kafka/v2"
+	"github.com/ONSdigital/dp-image-importer/handler"
+	kafka "github.com/ONSdigital/dp-kafka/v5"
 	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
@@ -19,9 +19,9 @@ import (
 type Initialiser interface {
 	DoGetHTTPServer(bindAddr string, router http.Handler) HTTPServer
 	DoGetHealthCheck(cfg *config.Config, buildTime, gitCommit, version string) (HealthChecker, error)
-	DoGetS3Client(ctx context.Context, awsRegion, bucketName string) (event.S3Writer, error)
-	DoGetS3ClientWithConfig(bucketName string, cfg aws.Config) event.S3Reader
-	DoGetImageAPI(ctx context.Context, cfg *config.Config) event.ImageAPIClient
+	DoGetS3Client(ctx context.Context, awsRegion, bucketName string) (handler.S3Writer, error)
+	DoGetS3ClientWithConfig(bucketName string, cfg aws.Config) handler.S3Reader
+	DoGetImageAPI(ctx context.Context, cfg *config.Config) handler.ImageAPIClient
 	DoGetKafkaConsumer(ctx context.Context, cfg *config.Config) (kafka.IConsumerGroup, error)
 }
 
@@ -36,5 +36,6 @@ type HealthChecker interface {
 	Handler(w http.ResponseWriter, req *http.Request)
 	Start(ctx context.Context)
 	Stop()
-	AddCheck(name string, checker healthcheck.Checker) (err error)
+	AddAndGetCheck(name string, checker healthcheck.Checker) (check *healthcheck.Check, err error)
+	Subscribe(s healthcheck.Subscriber, checks ...*healthcheck.Check)
 }

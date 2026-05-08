@@ -6,9 +6,9 @@ package mock
 import (
 	"context"
 	"github.com/ONSdigital/dp-image-importer/config"
-	"github.com/ONSdigital/dp-image-importer/event"
+	"github.com/ONSdigital/dp-image-importer/handler"
 	"github.com/ONSdigital/dp-image-importer/service"
-	kafka "github.com/ONSdigital/dp-kafka/v2"
+	kafka "github.com/ONSdigital/dp-kafka/v5"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"net/http"
 	"sync"
@@ -30,16 +30,16 @@ var _ service.Initialiser = &InitialiserMock{}
 //			DoGetHealthCheckFunc: func(cfg *config.Config, buildTime string, gitCommit string, version string) (service.HealthChecker, error) {
 //				panic("mock out the DoGetHealthCheck method")
 //			},
-//			DoGetImageAPIFunc: func(ctx context.Context, cfg *config.Config) event.ImageAPIClient {
+//			DoGetImageAPIFunc: func(ctx context.Context, cfg *config.Config) handler.ImageAPIClient {
 //				panic("mock out the DoGetImageAPI method")
 //			},
 //			DoGetKafkaConsumerFunc: func(ctx context.Context, cfg *config.Config) (kafka.IConsumerGroup, error) {
 //				panic("mock out the DoGetKafkaConsumer method")
 //			},
-//			DoGetS3ClientFunc: func(ctx context.Context, awsRegion string, bucketName string) (event.S3Writer, error) {
+//			DoGetS3ClientFunc: func(ctx context.Context, awsRegion string, bucketName string) (handler.S3Writer, error) {
 //				panic("mock out the DoGetS3Client method")
 //			},
-//			DoGetS3ClientWithConfigFunc: func(bucketName string, cfg aws.Config) event.S3Reader {
+//			DoGetS3ClientWithConfigFunc: func(bucketName string, cfg aws.Config) handler.S3Reader {
 //				panic("mock out the DoGetS3ClientWithConfig method")
 //			},
 //		}
@@ -56,16 +56,16 @@ type InitialiserMock struct {
 	DoGetHealthCheckFunc func(cfg *config.Config, buildTime string, gitCommit string, version string) (service.HealthChecker, error)
 
 	// DoGetImageAPIFunc mocks the DoGetImageAPI method.
-	DoGetImageAPIFunc func(ctx context.Context, cfg *config.Config) event.ImageAPIClient
+	DoGetImageAPIFunc func(ctx context.Context, cfg *config.Config) handler.ImageAPIClient
 
 	// DoGetKafkaConsumerFunc mocks the DoGetKafkaConsumer method.
 	DoGetKafkaConsumerFunc func(ctx context.Context, cfg *config.Config) (kafka.IConsumerGroup, error)
 
 	// DoGetS3ClientFunc mocks the DoGetS3Client method.
-	DoGetS3ClientFunc func(ctx context.Context, awsRegion string, bucketName string) (event.S3Writer, error)
+	DoGetS3ClientFunc func(ctx context.Context, awsRegion string, bucketName string) (handler.S3Writer, error)
 
 	// DoGetS3ClientWithConfigFunc mocks the DoGetS3ClientWithConfig method.
-	DoGetS3ClientWithConfigFunc func(bucketName string, cfg aws.Config) event.S3Reader
+	DoGetS3ClientWithConfigFunc func(bucketName string, cfg aws.Config) handler.S3Reader
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -207,7 +207,7 @@ func (mock *InitialiserMock) DoGetHealthCheckCalls() []struct {
 }
 
 // DoGetImageAPI calls DoGetImageAPIFunc.
-func (mock *InitialiserMock) DoGetImageAPI(ctx context.Context, cfg *config.Config) event.ImageAPIClient {
+func (mock *InitialiserMock) DoGetImageAPI(ctx context.Context, cfg *config.Config) handler.ImageAPIClient {
 	if mock.DoGetImageAPIFunc == nil {
 		panic("InitialiserMock.DoGetImageAPIFunc: method is nil but Initialiser.DoGetImageAPI was just called")
 	}
@@ -279,7 +279,7 @@ func (mock *InitialiserMock) DoGetKafkaConsumerCalls() []struct {
 }
 
 // DoGetS3Client calls DoGetS3ClientFunc.
-func (mock *InitialiserMock) DoGetS3Client(ctx context.Context, awsRegion string, bucketName string) (event.S3Writer, error) {
+func (mock *InitialiserMock) DoGetS3Client(ctx context.Context, awsRegion string, bucketName string) (handler.S3Writer, error) {
 	if mock.DoGetS3ClientFunc == nil {
 		panic("InitialiserMock.DoGetS3ClientFunc: method is nil but Initialiser.DoGetS3Client was just called")
 	}
@@ -319,7 +319,7 @@ func (mock *InitialiserMock) DoGetS3ClientCalls() []struct {
 }
 
 // DoGetS3ClientWithConfig calls DoGetS3ClientWithConfigFunc.
-func (mock *InitialiserMock) DoGetS3ClientWithConfig(bucketName string, cfg aws.Config) event.S3Reader {
+func (mock *InitialiserMock) DoGetS3ClientWithConfig(bucketName string, cfg aws.Config) handler.S3Reader {
 	if mock.DoGetS3ClientWithConfigFunc == nil {
 		panic("InitialiserMock.DoGetS3ClientWithConfigFunc: method is nil but Initialiser.DoGetS3ClientWithConfig was just called")
 	}

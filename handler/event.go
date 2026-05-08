@@ -1,4 +1,4 @@
-package event
+package handler
 
 // ImageUploaded provides an avro structure for an image uploaded event
 type ImageUploaded struct {

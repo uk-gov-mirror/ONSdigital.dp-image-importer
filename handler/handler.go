@@ -1,4 +1,4 @@
-package event
+package handler
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 
 	"github.com/ONSdigital/dp-api-clients-go/v2/image"
 	"github.com/ONSdigital/dp-healthcheck/healthcheck"
+	"github.com/ONSdigital/dp-image-importer/schema"
+	kafka "github.com/ONSdigital/dp-kafka/v5"
 	"github.com/ONSdigital/log.go/v2/log"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
@@ -64,7 +66,19 @@ type ImageAPIClient interface {
 
 // Handle takes a single event. From the uploaded S3 bucket, it writes it to the private bucket.
 // It also calls the API to create a new download variant and to update it after the variant has been imported.
-func (h *ImageUploadedHandler) Handle(ctx context.Context, event *ImageUploaded) (err error) {
+func (h *ImageUploadedHandler) Handle(ctx context.Context, _ int, msg kafka.Message) error {
+	event := &ImageUploaded{}
+	s := schema.ImageUploadedEvent
+
+	if err := s.Unmarshal(msg.GetData(), event); err != nil {
+		return &Error{
+			err: fmt.Errorf("failed to unmarshal event: %w", err),
+			logData: map[string]interface{}{
+				"msg_data": string(msg.GetData()),
+			},
+		}
+	}
+
 	uploadBucket := h.S3Upload.BucketName()
 	privateBucket := h.S3Private.BucketName()
 	logData := log.Data{
@@ -81,7 +95,7 @@ func (h *ImageUploadedHandler) Handle(ctx context.Context, event *ImageUploaded)
 	if err != nil {
 		log.Error(ctx, "error getting s3 object reader", err, logData)
 		h.setImageStatusToFailed(ctx, event.ImageID, "error getting s3 object reader")
-		return
+		return err
 	}
 	defer reader.Close()
 
@@ -97,7 +111,7 @@ func (h *ImageUploadedHandler) Handle(ctx context.Context, event *ImageUploaded)
 	if err != nil {
 		log.Error(ctx, "error posting image variant to API", err, logData)
 		h.setImageStatusToFailed(ctx, event.ImageID, "error posting image variant to API")
-		return
+		return err
 	}
 	logData["imageDownload"] = &imageDownload
 	log.Info(ctx, "posted image download", logData)
@@ -111,7 +125,7 @@ func (h *ImageUploadedHandler) Handle(ctx context.Context, event *ImageUploaded)
 	if err != nil {
 		log.Error(ctx, "error uploading to s3", err, logData)
 		h.setVariantStatusToFailed(ctx, event.ImageID, imageDownload, "failed to upload variant to s3")
-		return
+		return err
 	}
 	endTime := time.Now().UTC()
 
@@ -127,10 +141,10 @@ func (h *ImageUploadedHandler) Handle(ctx context.Context, event *ImageUploaded)
 	if err != nil {
 		log.Error(ctx, "error putting image variant to API", err, logData)
 		h.setImageStatusToFailed(ctx, event.ImageID, "error putting updated image variant to API")
-		return
+		return err
 	}
 	log.Info(ctx, "put image download", logData)
-	log.Info(ctx, "event successfully handled", logData)
+	log.Info(ctx, "handler successfully handled", logData)
 	return nil
 }
 
@@ -143,10 +157,9 @@ func (h *ImageUploadedHandler) getS3Reader(ctx context.Context, path string) (re
 
 // Upload to S3 from a reader
 func (h *ImageUploadedHandler) uploadToS3(ctx context.Context, path string, reader io.Reader) error {
-	privateBucket := h.S3Private.BucketName()
 	uploadInput := &s3.PutObjectInput{
 		Body:   reader,
-		Bucket: &privateBucket,
+		Bucket: new(h.S3Private.BucketName()),
 		Key:    &path,
 	}
 

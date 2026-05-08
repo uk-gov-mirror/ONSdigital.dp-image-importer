@@ -1,4 +1,4 @@
-package event_test
+package handler_test
 
 import (
 	"bytes"
@@ -10,8 +10,11 @@ import (
 	"time"
 
 	"github.com/ONSdigital/dp-api-clients-go/v2/image"
-	"github.com/ONSdigital/dp-image-importer/event"
-	"github.com/ONSdigital/dp-image-importer/event/mock"
+	"github.com/ONSdigital/dp-image-importer/handler"
+	"github.com/ONSdigital/dp-image-importer/handler/mock"
+	"github.com/ONSdigital/dp-image-importer/schema"
+	dpkafka "github.com/ONSdigital/dp-kafka/v5"
+	"github.com/ONSdigital/dp-kafka/v5/kafkatest"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	. "github.com/smartystreets/goconvey/convey"
@@ -23,6 +26,8 @@ const (
 )
 
 var (
+	testCtx                  = context.Background()
+	testWorkerID             = 1
 	testPrivateBucket        = "privateBucket"
 	testUploadedBucket       = "uploadedBucket"
 	testPrivatePath          = "images/123/original"
@@ -49,7 +54,13 @@ var (
 	}
 )
 
-var testEventNoFilename = event.ImageUploaded{
+var testEvent = handler.ImageUploaded{
+	ImageID:  "123",
+	Filename: "Filename.png",
+	Path:     "1234-uploadpng",
+}
+
+var testEventNoFilename = handler.ImageUploaded{
 	ImageID: "123",
 	Path:    "1234-uploadpng",
 }
@@ -90,14 +101,15 @@ func TestImageUploadedHandler_Handle(t *testing.T) {
 			mockS3Private.UploadFunc = func(ctx context.Context, input *s3.PutObjectInput, options ...func(*manager.Uploader)) (*manager.UploadOutput, error) {
 				return &manager.UploadOutput{}, nil
 			}
-			eventHandler := event.ImageUploadedHandler{
+			eventHandler := handler.ImageUploadedHandler{
 				AuthToken:          testAuthToken,
 				S3Upload:           mockS3Upload,
 				S3Private:          mockS3Private,
 				ImageCli:           mockImageAPI,
 				DownloadServiceURL: testDownloadURL,
 			}
-			err := eventHandler.Handle(testCtx, &testEvent)
+			msg := createMessage(testEvent)
+			err := eventHandler.Handle(testCtx, testWorkerID, msg)
 			So(err, ShouldBeNil)
 
 			Convey("An image download variant is posted to the image API", func() {
@@ -139,14 +151,15 @@ func TestImageUploadedHandler_Handle(t *testing.T) {
 			mockS3Private.UploadFunc = func(ctx context.Context, input *s3.PutObjectInput, options ...func(*manager.Uploader)) (*manager.UploadOutput, error) {
 				return &manager.UploadOutput{}, nil
 			}
-			eventHandler := event.ImageUploadedHandler{
+			eventHandler := handler.ImageUploadedHandler{
 				AuthToken:          testAuthToken,
 				S3Upload:           mockS3Upload,
 				S3Private:          mockS3Private,
 				ImageCli:           mockImageAPI,
 				DownloadServiceURL: testDownloadURL,
 			}
-			err := eventHandler.Handle(testCtx, &testEventNoFilename)
+			msg := createMessage(testEventNoFilename)
+			err := eventHandler.Handle(testCtx, testWorkerID, msg)
 			So(err, ShouldBeNil)
 
 			Convey("The image download variant is put to the image API with a state of imported", func() {
@@ -161,21 +174,22 @@ func TestImageUploadedHandler_Handle(t *testing.T) {
 			})
 		})
 
-		Convey("And a event handler (developer env), when Handle is triggered", func() {
+		Convey("And an event handler (developer env), when Handle is triggered", func() {
 			mockS3Upload.GetFunc = func(ctx context.Context, key string) (io.ReadCloser, *int64, error) {
 				return testFileContent, &testSize, nil
 			}
 			mockS3Private.UploadFunc = func(ctx context.Context, input *s3.PutObjectInput, options ...func(*manager.Uploader)) (*manager.UploadOutput, error) {
 				return &manager.UploadOutput{}, nil
 			}
-			eventHandler := event.ImageUploadedHandler{
+			eventHandler := handler.ImageUploadedHandler{
 				AuthToken:          testAuthToken,
 				S3Upload:           mockS3Upload,
 				S3Private:          mockS3Private,
 				ImageCli:           mockImageAPI,
 				DownloadServiceURL: testDownloadURL,
 			}
-			err := eventHandler.Handle(testCtx, &testEvent)
+			msg := createMessage(testEvent)
+			err := eventHandler.Handle(testCtx, testWorkerID, msg)
 			So(err, ShouldBeNil)
 
 			Convey("An image download variant is posted to the image API", func() {
@@ -219,14 +233,15 @@ func TestImageUploadedHandler_Handle(t *testing.T) {
 			mockS3Upload.GetFunc = func(ctx context.Context, key string) (io.ReadCloser, *int64, error) {
 				return nil, nil, errS3Uploaded
 			}
-			eventHandler := event.ImageUploadedHandler{
+			eventHandler := handler.ImageUploadedHandler{
 				AuthToken:          testAuthToken,
 				S3Upload:           mockS3Upload,
 				S3Private:          mockS3Private,
 				ImageCli:           mockImageAPI,
 				DownloadServiceURL: testDownloadURL,
 			}
-			err := eventHandler.Handle(testCtx, &testEvent)
+			msg := createMessage(testEvent)
+			err := eventHandler.Handle(testCtx, testWorkerID, msg)
 
 			Convey("S3Private is called and the same error is returned", func() {
 				So(err, ShouldResemble, errS3Uploaded)
@@ -245,18 +260,19 @@ func TestImageUploadedHandler_Handle(t *testing.T) {
 			})
 		})
 
-		Convey("And a event handler (developer env) with an S3Uploaded client that fails to obtain the source file, when Handle is triggered", func() {
+		Convey("And an event handler (developer env) with an S3Uploaded client that fails to obtain the source file, when Handle is triggered", func() {
 			mockS3Upload.GetFunc = func(ctx context.Context, key string) (io.ReadCloser, *int64, error) {
 				return nil, nil, errS3Uploaded
 			}
-			eventHandler := event.ImageUploadedHandler{
+			eventHandler := handler.ImageUploadedHandler{
 				AuthToken:          testAuthToken,
 				S3Upload:           mockS3Upload,
 				S3Private:          mockS3Private,
 				ImageCli:           mockImageAPI,
 				DownloadServiceURL: testDownloadURL,
 			}
-			err := eventHandler.Handle(testCtx, &testEvent)
+			msg := createMessage(testEvent)
+			err := eventHandler.Handle(testCtx, testWorkerID, msg)
 
 			Convey("S3Private is called and the same error is returned", func() {
 				So(err, ShouldResemble, errS3Uploaded)
@@ -291,14 +307,15 @@ func TestImageUploadedHandler_Handle(t *testing.T) {
 					return image.ImageDownload{}, errImageAPI
 				},
 			}
-			eventHandler := event.ImageUploadedHandler{
+			eventHandler := handler.ImageUploadedHandler{
 				AuthToken:          testAuthToken,
 				S3Upload:           mockS3Upload,
 				S3Private:          mockS3Private,
 				ImageCli:           mockImageAPIFail,
 				DownloadServiceURL: testDownloadURL,
 			}
-			err := eventHandler.Handle(testCtx, &testEvent)
+			msg := createMessage(testEvent)
+			err := eventHandler.Handle(testCtx, testWorkerID, msg)
 
 			Convey("ImageAPI.PostDownloadVariant is called and the error is returned", func() {
 				So(err, ShouldNotBeNil)
@@ -325,14 +342,15 @@ func TestImageUploadedHandler_Handle(t *testing.T) {
 			mockS3Private.UploadFunc = func(ctx context.Context, input *s3.PutObjectInput, options ...func(*manager.Uploader)) (*manager.UploadOutput, error) {
 				return nil, errS3Private
 			}
-			eventHandler := event.ImageUploadedHandler{
+			eventHandler := handler.ImageUploadedHandler{
 				AuthToken:          testAuthToken,
 				S3Upload:           mockS3Upload,
 				S3Private:          mockS3Private,
 				ImageCli:           mockImageAPI,
 				DownloadServiceURL: testDownloadURL,
 			}
-			err := eventHandler.Handle(testCtx, &testEvent)
+			msg := createMessage(testEvent)
+			err := eventHandler.Handle(testCtx, testWorkerID, msg)
 
 			Convey("S3Private is called and the same error is returned", func() {
 				So(err, ShouldResemble, errS3Private)
@@ -353,21 +371,22 @@ func TestImageUploadedHandler_Handle(t *testing.T) {
 			})
 		})
 
-		Convey("And a event handler (developer env) with an S3Private client that fails to upload the file, when Handle is triggered", func() {
+		Convey("And an event handler (developer env) with an S3Private client that fails to upload the file, when Handle is triggered", func() {
 			mockS3Upload.GetFunc = func(ctx context.Context, key string) (io.ReadCloser, *int64, error) {
 				return testFileContent, &testSize, nil
 			}
 			mockS3Private.UploadFunc = func(ctx context.Context, input *s3.PutObjectInput, options ...func(*manager.Uploader)) (*manager.UploadOutput, error) {
 				return nil, errS3Private
 			}
-			eventHandler := event.ImageUploadedHandler{
+			eventHandler := handler.ImageUploadedHandler{
 				AuthToken:          testAuthToken,
 				S3Upload:           mockS3Upload,
 				S3Private:          mockS3Private,
 				ImageCli:           mockImageAPI,
 				DownloadServiceURL: testDownloadURL,
 			}
-			err := eventHandler.Handle(testCtx, &testEvent)
+			msg := createMessage(testEvent)
+			err := eventHandler.Handle(testCtx, testWorkerID, msg)
 
 			Convey("S3Private is called and the same error is returned", func() {
 				So(err, ShouldResemble, errS3Private)
@@ -410,14 +429,15 @@ func TestImageUploadedHandler_Handle(t *testing.T) {
 					return image.ImageDownload{}, errImageAPI
 				},
 			}
-			eventHandler := event.ImageUploadedHandler{
+			eventHandler := handler.ImageUploadedHandler{
 				AuthToken:          testAuthToken,
 				S3Upload:           mockS3Upload,
 				S3Private:          mockS3Private,
 				ImageCli:           mockImageAPIFail,
 				DownloadServiceURL: testDownloadURL,
 			}
-			err := eventHandler.Handle(testCtx, &testEvent)
+			msg := createMessage(testEvent)
+			err := eventHandler.Handle(testCtx, testWorkerID, msg)
 
 			Convey("ImageAPI.PutDownloadVariant is called and the error is returned", func() {
 				So(err, ShouldNotBeNil)
@@ -438,4 +458,11 @@ func TestImageUploadedHandler_Handle(t *testing.T) {
 		})
 	})
 
+}
+
+func createMessage(s interface{}) dpkafka.Message {
+	e, err := schema.ImageUploadedEvent.Marshal(s)
+	So(err, ShouldBeNil)
+	msg := kafkatest.NewMessage(e)
+	return msg
 }

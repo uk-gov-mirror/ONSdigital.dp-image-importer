@@ -2,13 +2,15 @@ package service
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/ONSdigital/dp-api-clients-go/v2/image"
 	"github.com/ONSdigital/dp-healthcheck/healthcheck"
 	"github.com/ONSdigital/dp-image-importer/config"
-	"github.com/ONSdigital/dp-image-importer/event"
-	kafka "github.com/ONSdigital/dp-kafka/v2"
+	"github.com/ONSdigital/dp-image-importer/handler"
+	kafka "github.com/ONSdigital/dp-kafka/v5"
 	dphttp "github.com/ONSdigital/dp-net/v3/http"
 	dps3 "github.com/ONSdigital/dp-s3/v3"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -16,6 +18,25 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
+
+// GetHTTPServer creates an HTTP Server with the provided bind address and router
+var GetHTTPServer = func(bindAddr string, router http.Handler) HTTPServer {
+	s := dphttp.NewServer(bindAddr, router)
+	s.HandleOSSignals = false
+	return s
+}
+
+var GetHealthCheck = func(cfg *config.Config, buildTime, gitCommit, version string) (HealthChecker, error) {
+	versionInfo, err := healthcheck.NewVersionInfo(buildTime, gitCommit, version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get version info: %w", err)
+	}
+	return new(healthcheck.New(
+		versionInfo,
+		cfg.HealthCheckCriticalTimeout,
+		cfg.HealthCheckInterval,
+	)), nil
+}
 
 // ExternalServiceList holds the initialiser and initialisation state of external services.
 type ExternalServiceList struct {
@@ -39,67 +60,27 @@ func NewServiceList(initialiser Initialiser) *ExternalServiceList {
 	}
 }
 
-// Init implements the Initialiser interface to initialise dependencies
-type Init struct{}
-
-// GetHTTPServer creates an http server and sets the Server flag to true
-func (e *ExternalServiceList) GetHTTPServer(bindAddr string, router http.Handler) HTTPServer {
-	s := e.Init.DoGetHTTPServer(bindAddr, router)
-	return s
-}
-
 // GetS3Clients returns S3 clients uploaded and private. They share the same AWS session.
-func (e *ExternalServiceList) GetS3Clients(cfg *config.Config) (s3Uploaded event.S3Reader, s3Private event.S3Writer, err error) {
+var GetS3Clients = func(cfg *config.Config) (s3Uploaded handler.S3Reader, s3Private handler.S3Writer, err error) {
 	ctx := context.Background()
-	s3Private, err = e.Init.DoGetS3Client(ctx, cfg.AwsRegion, cfg.S3PrivateBucketName)
+	s3Private, err = GetS3Client(ctx, cfg.AwsRegion, cfg.S3PrivateBucketName)
 	if err != nil {
 		return nil, nil, err
 	}
-	e.S3Private = true
-	s3Uploaded, err = e.Init.DoGetS3Client(ctx, cfg.AwsRegion, cfg.S3UploadedBucketName)
+	s3Uploaded, err = GetS3Client(ctx, cfg.AwsRegion, cfg.S3UploadedBucketName)
 	if err != nil {
 		return nil, nil, err
 	}
-	e.S3Uploaded = true
 	return
 }
 
-// GetImageAPI creates an ImageAPI client and sets the ImageAPI flag to true
-func (e *ExternalServiceList) GetImageAPI(ctx context.Context, cfg *config.Config) event.ImageAPIClient {
-	imageAPI := e.Init.DoGetImageAPI(ctx, cfg)
-	e.ImageAPI = true
-	return imageAPI
+// GetImageAPI creates an ImageAPI client
+var GetImageAPI = func(ctx context.Context, cfg *config.Config) handler.ImageAPIClient {
+	return image.NewAPIClient(cfg.ImageAPIURL)
 }
 
-// GetKafkaConsumer creates a Kafka consumer and sets the consumer flag to true
-func (e *ExternalServiceList) GetKafkaConsumer(ctx context.Context, cfg *config.Config) (kafka.IConsumerGroup, error) {
-	consumer, err := e.Init.DoGetKafkaConsumer(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	e.KafkaConsumer = true
-	return consumer, nil
-}
-
-// GetHealthCheck creates a healthcheck with versionInfo and sets teh HealthCheck flag to true
-func (e *ExternalServiceList) GetHealthCheck(cfg *config.Config, buildTime, gitCommit, version string) (HealthChecker, error) {
-	hc, err := e.Init.DoGetHealthCheck(cfg, buildTime, gitCommit, version)
-	if err != nil {
-		return nil, err
-	}
-	e.HealthCheck = true
-	return hc, nil
-}
-
-// DoGetHTTPServer creates an HTTP Server with the provided bind address and router
-func (e *Init) DoGetHTTPServer(bindAddr string, router http.Handler) HTTPServer {
-	s := dphttp.NewServer(bindAddr, router)
-	s.HandleOSSignals = false
-	return s
-}
-
-// DoGetS3Client creates a new S3Client for the provided AWS region and bucket name.
-func (e *Init) DoGetS3Client(ctx context.Context, awsRegion, bucketName string) (event.S3Writer, error) {
+// GetS3Client creates a new S3Client for the provided AWS region and bucket name.
+var GetS3Client = func(ctx context.Context, awsRegion, bucketName string) (handler.S3Writer, error) {
 	cfg, _ := config.Get()
 
 	var s3Client *dps3.Client
@@ -130,52 +111,30 @@ func (e *Init) DoGetS3Client(ctx context.Context, awsRegion, bucketName string) 
 	return s3Client, nil
 }
 
-// DoGetS3ClientWithConfig creates a new S3Clienter (extension of S3Client with Upload operations)
-// for the provided bucket name, using an existing AWS session
-func (e *Init) DoGetS3ClientWithConfig(bucketName string, cfg aws.Config) event.S3Reader {
-	return dps3.NewClientWithConfig(bucketName, cfg)
-}
-
-// DoGetImageAPI returns an Image API client
-func (e *Init) DoGetImageAPI(ctx context.Context, cfg *config.Config) event.ImageAPIClient {
-	return image.NewAPIClient(cfg.ImageAPIURL)
-}
-
-// DoGetKafkaConsumer returns a Kafka Consumer group
-func (e *Init) DoGetKafkaConsumer(ctx context.Context, cfg *config.Config) (kafka.IConsumerGroup, error) {
-	kafkaOffset := kafka.OffsetOldest
-
-	cConfig := &kafka.ConsumerGroupConfig{
-		Offset:       &kafkaOffset,
-		KafkaVersion: &cfg.KafkaVersion,
+// GetKafkaConsumer returns a Kafka Consumer group
+var GetKafkaConsumer = func(ctx context.Context, cfg *config.Kafka, topic string) (kafka.IConsumerGroup, error) {
+	if cfg == nil {
+		return nil, errors.New("cannot create a kafka consumer without kafka config")
 	}
-	if cfg.KafkaSecProtocol == "TLS" {
-		cConfig.SecurityConfig = kafka.GetSecurityConfig(
-			cfg.KafkaSecCACerts,
-			cfg.KafkaSecClientCert,
-			cfg.KafkaSecClientKey,
-			cfg.KafkaSecSkipVerify,
+	kafkaOffset := kafka.OffsetNewest
+	if cfg.OffsetOldest {
+		kafkaOffset = kafka.OffsetOldest
+	}
+	cgConfig := &kafka.ConsumerGroupConfig{
+		BrokerAddrs:       cfg.Addr,
+		Topic:             topic,
+		GroupName:         cfg.ImageUploadedGroup,
+		MinBrokersHealthy: &cfg.ConsumerMinBrokersHealthy,
+		KafkaVersion:      &cfg.Version,
+		Offset:            &kafkaOffset,
+	}
+	if cfg.SecProtocol == config.KafkaTLSProtocol {
+		cgConfig.SecurityConfig = kafka.GetSecurityConfig(
+			cfg.SecCACerts,
+			cfg.SecClientCert,
+			cfg.SecClientKey,
+			cfg.SecSkipVerify,
 		)
 	}
-
-	cgChannels := kafka.CreateConsumerGroupChannels(cfg.KafkaConsumerWorkers)
-
-	return kafka.NewConsumerGroup(
-		ctx,
-		cfg.Brokers,
-		cfg.ImageUploadedTopic,
-		cfg.ImageUploadedGroup,
-		cgChannels,
-		cConfig,
-	)
-}
-
-// DoGetHealthCheck creates a healthcheck with versionInfo
-func (e *Init) DoGetHealthCheck(cfg *config.Config, buildTime, gitCommit, version string) (HealthChecker, error) {
-	versionInfo, err := healthcheck.NewVersionInfo(buildTime, gitCommit, version)
-	if err != nil {
-		return nil, err
-	}
-	hc := healthcheck.New(versionInfo, cfg.HealthCheckCriticalTimeout, cfg.HealthCheckInterval)
-	return &hc, nil
+	return kafka.NewConsumerGroup(ctx, cgConfig)
 }

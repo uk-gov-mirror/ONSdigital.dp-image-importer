@@ -7,19 +7,19 @@ import (
 	"context"
 	"github.com/ONSdigital/dp-api-clients-go/v2/image"
 	"github.com/ONSdigital/dp-healthcheck/healthcheck"
-	"github.com/ONSdigital/dp-image-importer/event"
+	"github.com/ONSdigital/dp-image-importer/handler"
 	"sync"
 )
 
-// Ensure, that ImageAPIClientMock does implement event.ImageAPIClient.
+// Ensure, that ImageAPIClientMock does implement handler.ImageAPIClient.
 // If this is not the case, regenerate this file with moq.
-var _ event.ImageAPIClient = &ImageAPIClientMock{}
+var _ handler.ImageAPIClient = &ImageAPIClientMock{}
 
-// ImageAPIClientMock is a mock implementation of event.ImageAPIClient.
+// ImageAPIClientMock is a mock implementation of handler.ImageAPIClient.
 //
 //	func TestSomethingThatUsesImageAPIClient(t *testing.T) {
 //
-//		// make and configure a mocked event.ImageAPIClient
+//		// make and configure a mocked handler.ImageAPIClient
 //		mockedImageAPIClient := &ImageAPIClientMock{
 //			CheckerFunc: func(ctx context.Context, state *healthcheck.CheckState) error {
 //				panic("mock out the Checker method")
@@ -38,7 +38,7 @@ var _ event.ImageAPIClient = &ImageAPIClientMock{}
 //			},
 //		}
 //
-//		// use mockedImageAPIClient in code that requires event.ImageAPIClient
+//		// use mockedImageAPIClient in code that requires handler.ImageAPIClient
 //		// and then make assertions.
 //
 //	}
