@@ -56,13 +56,13 @@ func Get() (*Config, error) {
 	cfg := &Config{
 		BindAddr:                   "localhost:24800",
 		ServiceAuthToken:           "4424A9F2-B903-40F4-85F1-240107D1AFAF",
-		AwsRegion:                  "eu-west-1",
+		AwsRegion:                  "eu-west-2",
 		GracefulShutdownTimeout:    5 * time.Second,
 		HealthCheckInterval:        30 * time.Second,
 		HealthCheckCriticalTimeout: 90 * time.Second,
 		ImageAPIURL:                "http://localhost:24700",
-		S3PrivateBucketName:        "csv-exported",
-		S3UploadedBucketName:       "dp-frontend-florence-file-uploads",
+		S3PrivateBucketName:        "ons-dp-sandbox-encrypted-datasets",
+		S3UploadedBucketName:       "ons-dp-sandbox-publishing-uploaded-datasets",
 		DownloadServiceURL:         "http://localhost:23600",
 		StopConsumingOnUnhealthy:   true,
 		Kafka: &Kafka{
