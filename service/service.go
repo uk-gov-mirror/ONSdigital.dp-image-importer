@@ -30,7 +30,7 @@ func New() *Service {
 	return &Service{}
 }
 
-// Init initializes the Service by setting up essential components like Kafka producers, consumers, health checks, and caching.
+// Init initializes the Service by setting up essential components like Kafka producers, consumers and health checks.
 // It validates the provided configuration, initializes clients and consumers, registers health checks, and sets up an HTTP server for health endpoints.
 func (svc *Service) Init(ctx context.Context, cfg *config.Config, buildTime, gitCommit, version string) error {
 	var err error
@@ -66,7 +66,7 @@ func (svc *Service) Init(ctx context.Context, cfg *config.Config, buildTime, git
 }
 
 // initClients initializes external service clients based on the service configuration.
-// It sets up clients for Zebedee, DatasetAPI, and Topic services if their corresponding flags are enabled.
+// It sets up clients for ImageAPI and S3.
 func (svc *Service) initClients(ctx context.Context) error {
 
 	// Get S3 Clients
