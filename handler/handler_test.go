@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/ioutil"
 	"testing"
 	"time"
 
@@ -33,7 +32,7 @@ var (
 	testPrivatePath          = "images/123/original"
 	testSize           int64 = 1234
 	fileBytes                = []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
-	testFileContent          = ioutil.NopCloser(bytes.NewReader(fileBytes))
+	testFileContent          = io.NopCloser(bytes.NewReader(fileBytes))
 	errS3Private             = errors.New("s3Private error")
 	errS3Uploaded            = errors.New("s3Uploaded error")
 	errImageAPI              = errors.New("imageAPI error")

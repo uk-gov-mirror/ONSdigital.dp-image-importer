@@ -114,7 +114,7 @@ func (svc *Service) Start(ctx context.Context, svcErrors chan error) error {
 	// If start/stop on health updates is disabled, start consuming as soon as possible
 	if !svc.Config.StopConsumingOnUnhealthy {
 		if err := svc.ImageUploadedConsumer.Start(); err != nil {
-			return fmt.Errorf("content-publish consumer failed to start: %w", err)
+			return fmt.Errorf("image-uploaded consumer failed to start: %w", err)
 		}
 	}
 
@@ -255,8 +255,8 @@ func (svc *Service) registerClientCheckers(ctx context.Context, hasErrors *bool)
 	if svc.S3UploadedCli != nil {
 		s3UploadedCheck, *hasErrors = svc.addHealthCheck(ctx, true, "S3Uploaded client", svc.S3UploadedCli.Checker, *hasErrors)
 	}
-	if svc.S3UploadedCli != nil {
-		s3PrivateCheck, *hasErrors = svc.addHealthCheck(ctx, true, "S3Private client", svc.S3UploadedCli.Checker, *hasErrors)
+	if svc.S3PrivateCli != nil {
+		s3PrivateCheck, *hasErrors = svc.addHealthCheck(ctx, true, "S3Private client", svc.S3PrivateCli.Checker, *hasErrors)
 	}
 	return imageAPICheck, s3UploadedCheck, s3PrivateCheck
 }
